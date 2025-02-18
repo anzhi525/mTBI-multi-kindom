@@ -1,197 +1,182 @@
-#Fig3 B-----------------------------
-library(ggalluvial)
+#Fig4 A-----------------------------
+library(qgraph)
 library(RColorBrewer)
+library(tidyverse)
 
-data <- read.table(file ="pathway.txt",header = T,sep="\t", comment.char="",quot="",check.names=F)
-sankey_colors<-  colors <- c("#FFFF99", "#CCEBC5","#B2DF8A", "#A6CEE3","#FDDAEC", "#BEBADA")
-p.sankey.ED <- ggplot(data = data,                      
-                      aes(axis1 = data$Level1,                           
-                          axis3 = data$Level3)) +  
-  scale_x_discrete(limits = c("", "", "")) +  
-  geom_alluvium(aes(fill = data$Level1, alpha =1),curve_type = "arctangent") +  
-  scale_color_manual(values = sankey_colors)+  scale_fill_manual(values = sankey_colors)+  
-  geom_stratum(alpha = 0,color = adjustcolor( "white", alpha.f = 1),size=1.2, fill = 'white') +  
-   geom_text(stat = "stratum",cex=6, aes(label = after_stat(stratum)),hjust = 1) +  
+pl2 <- c("Control","mTBI")
 
-  theme_void()+  
-  theme(legend.position="none",
-        axis.text = element_text(size = 16),
-        axis.title = element_blank(),
-        axis.text.y = element_blank(),
-        panel.grid=element_blank())
-p.sankey.ED
+metadata = read.table("metadata.txt", header=T, row.names=1, sep="\t", comment.char="",check.names=F, quot="",stringsAsFactors = F)
+metadata00 <- subset(metadata, Group %in% pl2)
+metadata00$SampleID <- rownames(metadata00)
 
-breaklist <- seq(-1,1,by=0.001)
-purple_green <- rev(brewer.pal(n=11,name="PiYG"))
-col_purple_green <- colorRampPalette(purple_green)(length(breaklist))
+outdata = read.table(paste0("diff_species.txt"), header=T, row.names=1, sep="\t", quot="",comment.char="",check.names=F)
+outdata00 <- outdata[,rownames(metadata00)]
+outdata00 <- outdata00[which(rowSums(outdata00)>0.0005),]
 
-color <-c("#FFFF99", "#CCEBC5","#B2DF8A", "#A6CEE3","#FDDAEC", "#BEBADA")
-data$Level3 <- factor(data$Level3, levels = rev(unique(data$Level3)))
+otu_data_all= read.table(paste0("taxnomy.txt"), header=F, sep="\t", comment.char="#", quot="",stringsAsFactors = F)
+otu_data_all1 <- otu_data_all
+character_to_count <- "|"
 
-p_bub <- ggplot(data,
-                aes(x=coef,y=Level3,color=-log10(qval),size=5))+#,size=genenum_cat
-  geom_point(alpha=0.7, shape=19)+
-  scale_x_continuous(breaks = seq(-1.5,1.5, by = 0.5))+
-  labs(x="Coef",y="")+
-  scale_color_gradientn(colours = col_purple_green,name="-log10(FDR)")+
-  scale_size(guide = "none")+
-  theme_bw() +
-  theme(
-    axis.title.y = element_text(size = 15),
-    axis.title = element_text(size = 13),
-    axis.text.x = element_text(angle = 90, vjust = 0.5,size = 14),
-    axis.text.y = element_text(size = 14),
-    legend.title = element_text(size = 15),
-    legend.text = element_text(size = 14)
+filtered_rows <- otu_data_all1[str_count(otu_data_all1$V1, fixed(character_to_count)) == 7,]
+filtered_rows <- as.data.frame(filtered_rows)
+otu_data_all2 <- separate(data=filtered_rows, col=filtered_rows, into=c("domain","Kindom","Phylum","Class","Order","Family","Genus","Species"), sep = "\\|", remove = FALSE, convert = FALSE)
+otu_data_all2$Species_name <-gsub("s__", "", otu_data_all2$Species)
+
+otu_data_all2$Kindom[otu_data_all2$Kindom == ""] <- "k__other"
+otu_data_all2$Phylum[otu_data_all2$Phylum == ""] <- "p__other"
+otu_data_all2$Class[otu_data_all2$Class == ""] <- "c__other"
+otu_data_all2$Order[otu_data_all2$Order == ""] <- "o__other"
+otu_data_all2$Family[otu_data_all2$Family == ""] <- "f__other"
+otu_data_all2$Genus[otu_data_all2$Genus == ""] <- "g__other"
+otu_data_all2$Species[otu_data_all2$Species == ""] <- "s__other"
+
+taxonomy_table <- otu_data_all2 |>  dplyr::select(Species_name,domain,Kindom,Phylum,Order,Class,Family,Genus,Species) #|>
+
+taxonomy_table <- taxonomy_table %>%
+  mutate(phylum  = gsub("^p__", "", Phylum),
+         class   = gsub("^c__", "", Class),
+         order   = gsub("^o__", "", Order),
+         family  = gsub("^f__", "", Family),
+         genus   = gsub("^g__", "", Genus),             
+         species = gsub("^s__", "", Species),                
   )
 
-p_bub
+taxonomy_table$Kingdom <- taxonomy_table$domain
+taxonomy_table$Kingdom <-gsub("d__", "",taxonomy_table$Kingdom)
+taxonomy_table$Kingdom <-gsub("Eukaryota", "Fungi",taxonomy_table$Kingdom)
+taxonomy_table <- taxonomy_table |>  dplyr::select("Species",Kingdom) |> distinct() 
 
-p_cat = ggdraw()+ draw_plot(p.sankey.ED)+
-        draw_plot(p_bub,scale=0.51,x=0.36,y=-0.52,width=0.85,height=1.98)
+colnames(taxonomy_table) <- c("Species_name","Kingdom")
+taxonomy_table$Species_name <- make.names(taxonomy_table$Species_name)
 
-ggsave(file=paste0("KEGGpathway.pdf") ,p_cat,width = 260, height = 200, units="mm",limitsize = FALSE)
-ggsave(file=paste0("KEGGpathway.png"),p_cat,width = 260, height = 200, units="mm",limitsize = FALSE)
+top <- read.table("feature.csv",header=T)
+top.tax2 <- top$feature
 
-#Fig3 C-----------------------------
-library(tidyverse)
-library(circlize)
-library(ComplexHeatmap)
-library(readxl)
+annotation <- taxonomy_table
+colnames(annotation) <- c("node","Phylum")
 
-df <- read_xlsx(path = "GBM.xlsx", col_names = T, sheet = 1) %>%
-  dplyr::mutate(start = 0, 
-                end = N)
+metadata11 = metadata00
+outdata = outdata00
 
-pdf(file = "GBM.pdf",
-    height =2,
-    width = 2)
-circos.par("start.degree" = 90,
-           "track.margin" = c(0.02, 0.02),
-           "cell.padding" = c(0.02, 0.02, 0, 0))
+otu11 <- outdata[,rownames(metadata)]
+metadata <- subset(metadata11, Group %in% pl2[i])
 
-df1 <- df %>% 
-  dplyr::select(feature, start, end, Description) %>%
-  dplyr::rename(ID = feature) %>%
-  dplyr::mutate(Description = str_remove(Description, pattern = "\\s\\(.*"))
+otu <- otu11[,colnames(otu11)%in%rownames(metadata)]
 
-feature_color <- c("#D51F26", "#272E6A", "#208A42", "#89288F", "#F47D2B", "#FEE500", "#8A9FD1", "#C06CAB", "#E6C2DC",
-                 "#90D5E4", "#89C75F", "#F37B7D", "#9983BD", "#D24B27", "#3BBCA8", "#6E4B9E", "#0C727C",
-                 "#D8A767", "#7DD06F", "#844081", "#688EC1", "#C17E73", "#6CD3A7", "#597873", "#7B6FD0",
-                 "#CF4A31", "#D0CD47", "#CBC594", "#D19EC4", "#5A7E36", "#D4477D", "#403552", "#76D73C",
-                 "#96CED5", "#CE54D1", "#C48736", "#FFB300", "#803E75", "#FF6800", "#A6BDD7", "#C10020", "#CEA262",
-                 "#817066", "#007D34", "#F6768E", "#00538A", "#FF7A5C", "#53377A", "#FF8E00", "#B32851", "#F4C800",
-                 "#7F180D", "#93AA00", "#593315", "#F13A13", "#232C16", "#faa818", "#41a30d", "#fbdf72", "#367d7d",
-                 "#d33502", "#6ebcbc", "#37526d", "#916848", "#f5b390", "#342739", "#bed678", "#a6d9ee", "#0d74b6",
-                 "#60824f", "#725ca5", "#e0598b", "#371377", "#7700FF", "#9E0142", "#FF0080", "#DC494C", "#F88D51",
-                 "#FAD510", "#FFFF5F", "#88CFA4", "#238B45", "#02401B", "#0AD7D3", "#046C9A", "#A2A475", "grey35",
-                 "#D52126", "#88CCEE", "#FEE52C", "#117733", "#CC61B0", "#99C945", "#2F8AC4", "#332288", "#E68316",
-                 "#661101", "#F97B72", "#DDCC77", "#11A579", "#E73F74", "#A6CDE2", "#1E78B4", "#74C476", "#34A047",
-                 "#F59899", "#E11E26", "#FCBF6E", "#F47E1F", "#CAB2D6", "#6A3E98", "#FAF39B", "#B15928", "#1a1334",
-                 "#01545a", "#017351", "#03c383", "#aad962", "#fbbf45", "#ef6a32", "#ed0345", "#a12a5e", "#710162",
-                 "#3B9AB2", "#2a7185", "#a64027", "#9cdff0", "#022336", "#78B7C5", "#EBCC2A", "#E1AF00", "#F21A00",
-                 "#FF0000", "#00A08A", "#F2AD00", "#F98400", "#5BBCD6")
+A=t(otu)
+C=A/rowSums(A)
+otu2=t(C)
+otu3 <- as.data.frame(otu2[which(rowSums(otu2) >= 0), ])
+otu4 <- otu[rownames(otu3),]
 
-circos.initializeWithIdeogram(df1, plotType = NULL)
-circos.track(
-  ylim = c(0, 1), 
-  track.height = 0.08,  
-  bg.border = NA,  
-  bg.col = feature_color, 
-  panel.fun = function(x, y) {
-    ylim = get.cell.meta.data("ycenter")  
-    xlim = get.cell.meta.data("xcenter")
-    sector.name = get.cell.meta.data("sector.index")  
-    track.index = get.current.track.index()
-    ideogram.height=10
-  } )
+CorrDF <- function(cormat, pmat) {
+  ut <- upper.tri(cormat) 
+  data.frame(
+    from = rownames(cormat)[col(cormat)[ut]],
+    to = rownames(cormat)[row(cormat)[ut]],
+    cor = (cormat)[ut],
+    p = pmat[ut]
+  )
+}
+otu0 <- otu4
+occor <- corAndPvalue(t(otu0), use='pairwise', method="spearman") 
+cor_df <- CorrDF(occor$cor , occor$p) 
+cor_df <- cor_df[which(abs(cor_df$cor) >= 0.5),] 
+cor_df <- cor_df[which(cor_df$p < 0.05),] 
+suppressWarnings(write.table(cor_df, file=paste0(pl2[i],".cor.0.5_p0.05.txt"), append = F, quote = F, sep="\t", eol = "\n", na = "NA", dec = ".", row.names = F, col.names = T))
 
-df2 <- df %>% 
-  dplyr::select(feature, start, end, pval) %>%
-  dplyr::rename(ID = feature) %>%
-  dplyr::mutate(`-log10pvalue` = -log10(pval)) %>%
-  dplyr::select(1,2,3,5)
+ 
+e2.case <- cor_df[,1:3]
+colnames(e2.case) <- c("genus","variable","value")
+e2.case = e2.case[which(e2.case$value != 0), ]
+edge.case = e2.case[which(e2.case$genus != e2.case$variable), ]
+edge.case2 = edge.case
+node.case = data.frame(unique(c(
+  as.character(edge.case2$genus),
+  as.character(edge.case2$variable)
+)))
+colnames(node.case) = "node"
+rownames(node.case) = node.case$node
+node.case$score <- 1
+node.case2 = node.case
+node.case2$weight = abs(node.case2$score)
+node.case2$class = 1 
+node.case2[top.tax2, "class"] = 2 
+node.case2 <- node.case2[complete.cases(node.case2), ]
+edge.case2$weight = 0.1
+for (kk in 1:length(top.tax2))
+{
+  for (mm in 1:nrow(edge.case2))
+  {
+    if (as.character(edge.case2[mm,1]) == top.tax2[kk] || as.character(edge.case2[mm,2]) == top.tax2[kk])
+    {
+      edge.case2[mm,"weight"] = 1
+    }else
+    {
+      next
+    }
+  }
+}
+edge.case2$class = 1
+edge.case2[which(edge.case2$value < 0), "class"] = 2  
+node.case2 <-   left_join(node.case2,annotation,by = "node") 
+g1 <- graph.empty()
+g1 <- graph_from_data_frame(edge.case2, vertices = node.case2)
+nodeSize <- 1.5
+nodeDize <- 1.2
+edgeSize <- 0.3
+edgeDize <- 0
+arrowSize = 0
+my.layout = layout.sphere
 
-summary(df2$`-log10pvalue`)
+EColor <- c("#ea66a6", "#2a5caa")
 
-col_fun1 = colorRamp2(breaks = c(1, 2, 4, 6, 8, 10), colors =c("#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#2c7fb8","#253494"))
+getPalette = colorRampPalette(brewer.pal(4, "Set1"))
+my_color <- getPalette(length(levels(as.factor(V(g1)$Phylum))))
+VText <- c(0.2,1)
+V(g1)$size <- nodeSize + nodeDize * 10 * as.numeric(as.vector(node.case2$weight*0.5))
 
-circos.genomicTrackPlotRegion(
-  df2,
-  track.height = 0.09, 
-  bg.border = NA, 
-  stack = TRUE,  
-  
-  panel.fun = function(region, value, ...) {
-    circos.genomicRect(
-      region, 
-      value, 
-      col = col_fun1(value[[1]]), 
-      border = NA, ...
-      ) 
-    ylim = get.cell.meta.data("ycenter")  
-    xlim = get.cell.meta.data("xcenter")
-    sector.name = get.cell.meta.data("sector.index") 
-    circos.text(xlim, ylim + 1, sector.name, cex = 0.3, niceFacing = FALSE)  # 添加 GO Term 
-  } )
+V(g1)$color <- my_color[factor(node.case2$Phylum)] 
+V(g1)$label.cex <- VText[node.case2$class]
+V(g1)$frame.color <- "black"
+E(g1)$width <-
+  edgeSize + (edgeDize * abs(3 * as.numeric(as.vector(
+    edge.case2$weight
+  ))))
+E(g1)$color <- EColor[edge.case2$class]
+E(g1)$arrow.size <- arrowSize
 
-df3 <- df %>%
-  dplyr::select(feature, start, end, coef) %>%
-  dplyr::rename(ID = feature)
+g1_2 <- g1
+V(g1_2)$label <- ifelse(V(g1_2)$name %in% top.tax2, as.character(V(g1_2)$name), "")
 
-col_fun2 = colorRamp2(breaks = c(-2, 0, 1), colors =c("#33A02C","#ffffff","#482878"))
+e <- get.edgelist(g1_2,names=FALSE)
+l <- qgraph.layout.fruchtermanreingold(e,vcount=vcount(g1_2),
+                                       area=8*(vcount(g1_2)^2.3),repulse.rad=(vcount(g1_2)^3.1))
+plot(
+  g1_2,
+  layout = l,
+  edge.width=1.5, 
+  vertex.label.color=c("black"),
+  vertex.frame.color = "black",
+  vertex.shapes = "none"
+)
+legend("right", legend =levels(as.factor(V(g1)$Phylum)),
+       col = my_color,
+       horiz = FALSE,pch = 16,text.width = 1 / 50,cex = 2,
+       inset = 0.05, xpd =  FALSE,bty = "n",title = "Kingdom")
 
-summary(df3$coef)
-
-df3_up <- df3 %>% dplyr::filter(coef > 0)
-df3_down <- df3 %>% dplyr::filter(coef < 0)
-
-circos.genomicTrack(
-  df3_up, 
-  ylim = c(0.05, 1), 
-  track.height = 0.45, 
-  bg.col = "#f0f0f0", 
-  bg.border = NA,  
-  track.margin = c(0, 0), 
-  panel.fun = function(region, value, ...) {
-    sector.name = get.cell.meta.data("sector.index")  
-    circos.genomicRect(region, value, 
-                       col = col_fun2(value[[1]]), 
-                       border = NA, 
-                       ytop.column = 1, ybottom = 0,
-                       ...) 
-  } )
-
-circos.genomicTrack(
-  df3_down, 
-  ylim = c(-1.5, 0), 
-  track.height = 0.25, 
-  bg.col = NA, 
-  bg.border = NA, 
-  track.margin = c(0, 0), 
-  panel.fun = function(region, value, ...) {
-    sector.name = get.cell.meta.data("sector.index")  
-    circos.genomicRect(region, value, 
-                       col = col_fun2(value[[1]]), 
-                       border = NA,
-                       ytop = 0,
-                       ytop.column = 0, 
-                       ybottom = -1.5,
-                       ybottom.column = -1.5,
-                       ...) 
-  } )
-circos.clear()
-
-pvalue_legend <- Legend(
-  title = "",
-  labels = rev(c(1, 2, 4, 6, 8, 10)),
-  type = "points", pch = NA,
-  background = rev(c("#ffffcc","#c7e9b4","#7fcdbb","#41b6c4","#2c7fb8","#253494")),
-  labels_gp = gpar(fontsize = 5), grid_height = unit(0.3, "cm"), grid_width = unit(0.3, "cm"))
-
-legend_list <- lgd_list_vertical <- packLegend(pvalue_legend)
-pushViewport(viewport(x = 0.9, y = 0.13))
-grid.draw(lgd_list_vertical)
-upViewport()
-
-dev.off()
+p = myplot({
+  plot(g1_2,layout=layout.sphere,
+       vertex.color=my_color,
+       vertex.label.color=c("black"),
+       vertex.frame.color = "black",
+       vertex.shapes = "none"
+  )
+  legend("right", legend =levels(as.factor(V(g1)$Phylum)),
+         col = my_color,
+         horiz = FALSE,pch = 16,text.width = 1 / 50,cex = 1.3,
+         inset = 0.1, xpd =  FALSE,bty = "n",title = "Kingdom")
+})
+p
+plotsave(p,file = paste0("Co-occurrence.pdf"),width =350, height = 250, units="mm",limitsize=FALSE)
+plotsave(p,file = paste0("Co-occurrence.png"),width = 350, height = 250, units="mm",limitsize=FALSE)

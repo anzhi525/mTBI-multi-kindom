@@ -1,182 +1,138 @@
-#Fig4 A-----------------------------
-library(qgraph)
-library(RColorBrewer)
-library(tidyverse)
+#Fig5 B-----------------------------
+setwd("09_feature_ggpub")
+library("RColorBrewer")
+library("ggplot2")
+library(grid)
+library(cowplot)
 
-pl2 <- c("Control","mTBI")
+breaklist <- seq(-1,1,by=0.001)
+purple_green <- rev(brewer.pal(n=11,name="PiYG"))
+col_purple_green <- colorRampPalette(purple_green)(length(breaklist))
 
-metadata = read.table("metadata.txt", header=T, row.names=1, sep="\t", comment.char="",check.names=F, quot="",stringsAsFactors = F)
-metadata00 <- subset(metadata, Group %in% pl2)
-metadata00$SampleID <- rownames(metadata00)
+color <- c("#8dd3c7","#bebada","#80b1d3","#fccde5",
+           "#feb24c","#33A02C","#B2DF8A","#FFFF99")
 
-outdata = read.table(paste0("diff_species.txt"), header=T, row.names=1, sep="\t", quot="",comment.char="",check.names=F)
-outdata00 <- outdata[,rownames(metadata00)]
-outdata00 <- outdata00[which(rowSums(outdata00)>0.0005),]
+data <- read.table(file = paste0("bacteria.txt"),header = T,sep="\t", comment.char="",quot="",check.names=F)
+   
+data = as.data.frame(data[(order(data$coef)), ])
+data$feature <- factor(data$feature,levels = data$feature)
 
-otu_data_all= read.table(paste0("taxnomy.txt"), header=F, sep="\t", comment.char="#", quot="",stringsAsFactors = F)
-otu_data_all1 <- otu_data_all
-character_to_count <- "|"
+p_bub <- ggplot(data,
+                aes(x=feature,y=coef,color=-log10(qval),size=5))+#,size=
+  geom_point(alpha=0.7, shape=19)+
 
-filtered_rows <- otu_data_all1[str_count(otu_data_all1$V1, fixed(character_to_count)) == 7,]
-filtered_rows <- as.data.frame(filtered_rows)
-otu_data_all2 <- separate(data=filtered_rows, col=filtered_rows, into=c("domain","Kindom","Phylum","Class","Order","Family","Genus","Species"), sep = "\\|", remove = FALSE, convert = FALSE)
-otu_data_all2$Species_name <-gsub("s__", "", otu_data_all2$Species)
-
-otu_data_all2$Kindom[otu_data_all2$Kindom == ""] <- "k__other"
-otu_data_all2$Phylum[otu_data_all2$Phylum == ""] <- "p__other"
-otu_data_all2$Class[otu_data_all2$Class == ""] <- "c__other"
-otu_data_all2$Order[otu_data_all2$Order == ""] <- "o__other"
-otu_data_all2$Family[otu_data_all2$Family == ""] <- "f__other"
-otu_data_all2$Genus[otu_data_all2$Genus == ""] <- "g__other"
-otu_data_all2$Species[otu_data_all2$Species == ""] <- "s__other"
-
-taxonomy_table <- otu_data_all2 |>  dplyr::select(Species_name,domain,Kindom,Phylum,Order,Class,Family,Genus,Species) #|>
-
-taxonomy_table <- taxonomy_table %>%
-  mutate(phylum  = gsub("^p__", "", Phylum),
-         class   = gsub("^c__", "", Class),
-         order   = gsub("^o__", "", Order),
-         family  = gsub("^f__", "", Family),
-         genus   = gsub("^g__", "", Genus),             
-         species = gsub("^s__", "", Species),                
+  labs(x="",y="Coef")+
+  scale_color_gradientn(colours = col_purple_green,name="-log10(FDR)")+
+  scale_size(guide = "none")+
+  theme_bw() +
+  theme(
+    axis.title.y = element_text(size = 18),
+    axis.title = element_text(size = 13),
+    axis.text.x = element_blank(),  
+    axis.text.y = element_text(size = 15),
+    legend.title = element_text(size = 18), 
+    legend.text = element_text(size = 15) 
   )
+p_bub
 
-taxonomy_table$Kingdom <- taxonomy_table$domain
-taxonomy_table$Kingdom <-gsub("d__", "",taxonomy_table$Kingdom)
-taxonomy_table$Kingdom <-gsub("Eukaryota", "Fungi",taxonomy_table$Kingdom)
-taxonomy_table <- taxonomy_table |>  dplyr::select("Species",Kingdom) |> distinct() 
 
-colnames(taxonomy_table) <- c("Species_name","Kingdom")
-taxonomy_table$Species_name <- make.names(taxonomy_table$Species_name)
+p_cat <- ggplot(data,aes(y=0.1,x=feature))+
+  geom_tile(aes(fill=Phylum),width=1, height=0.2)+ 
+  labs(fill="Phylum")+ 
+  scale_fill_manual(values=color) +
+  coord_cartesian(expand = FALSE)+
+  theme_bw()+
+  theme(panel.grid = element_blank(),
+        axis.text.x = element_text(size = 15,angle = 90,vjust = 0.5,hjust = 1,
+                                   colour = "black"), 
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title = element_blank(),
+        legend.title = element_text(size = 18),
+        legend.text = element_text(size = 15)
+        )
+p_cat
 
-top <- read.table("feature.csv",header=T)
-top.tax2 <- top$feature
+p <- plot_grid(
+	  p_bub,
+	  NULL,
+	  p_cat,
+	  align = "v",
+	  ncol = 1,
+	  rel_heights = c(5, -0.35, 4)
+	)
 
-annotation <- taxonomy_table
-colnames(annotation) <- c("node","Phylum")
+ggsave(file=paste0("bacteria.feature.pdf"),p,width = 10, height = 6.8,limitsize = FALSE)
+ggsave(file=paste0("bacteria.feature.png"),p,width = 10, height = 6.8,limitsize = FALSE)
 
-metadata11 = metadata00
-outdata = outdata00
 
-otu11 <- outdata[,rownames(metadata)]
-metadata <- subset(metadata11, Group %in% pl2[i])
+#Fig5 C-----------------------------
+result_df <- read.csv(file = paste0("roc.csv"),header = T)
 
-otu <- otu11[,colnames(otu11)%in%rownames(metadata)]
+result_df$group <- factor(result_df$group ,
+                       levels = c("A","B","V","F"),ordered = TRUE)
+first_row_df <- result_df %>% group_by(group) %>% slice(1) 
+legend_labels <- paste0(first_row_df$group, ": ", round(first_row_df$AUC,3))
 
-A=t(otu)
-C=A/rowSums(A)
-otu2=t(C)
-otu3 <- as.data.frame(otu2[which(rowSums(otu2) >= 0), ])
-otu4 <- otu[rownames(otu3),]
+getPalette_family = colorRampPalette(brewer.pal(4, "Set1"))
+Family_col <- getPalette_family(4)
 
-CorrDF <- function(cormat, pmat) {
-  ut <- upper.tri(cormat) 
-  data.frame(
-    from = rownames(cormat)[col(cormat)[ut]],
-    to = rownames(cormat)[row(cormat)[ut]],
-    cor = (cormat)[ut],
-    p = pmat[ut]
+roc_pic2 <- ggplot(result_df, aes(x = 1-specificities, y = sensitivities)) +
+  geom_path(aes(color = group), linewidth = 1.2, alpha = 0.7) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), color = "darkgrey", linetype = 4) +
+  scale_color_manual(values = Family_col, labels = legend_labels) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(color = "black"),
+    legend.key.size = unit(0.4, "cm"),
+    plot.title = element_text(hjust = 0.5),
+    legend.justification = c(1, 0),
+    legend.position = c(0.95, 0.25),
+    legend.title = element_blank(),
+    legend.background = element_rect(fill = NULL, linewidth = 0.2, linetype = "solid", color = "black")
   )
-}
-otu0 <- otu4
-occor <- corAndPvalue(t(otu0), use='pairwise', method="spearman") 
-cor_df <- CorrDF(occor$cor , occor$p) 
-cor_df <- cor_df[which(abs(cor_df$cor) >= 0.5),] 
-cor_df <- cor_df[which(cor_df$p < 0.05),] 
-suppressWarnings(write.table(cor_df, file=paste0(pl2[i],".cor.0.5_p0.05.txt"), append = F, quote = F, sep="\t", eol = "\n", na = "NA", dec = ".", row.names = F, col.names = T))
+roc_pic2
+ggsave(path = paste0(outdir), filename =paste0("roc_plot.pdf"), roc_pic2, width = 110, height = 110, units="mm")
+ggsave(path = paste0(outdir), filename =paste0("roc_plot.png"), roc_pic2, width = 110, height = 110, units="mm")
 
- 
-e2.case <- cor_df[,1:3]
-colnames(e2.case) <- c("genus","variable","value")
-e2.case = e2.case[which(e2.case$value != 0), ]
-edge.case = e2.case[which(e2.case$genus != e2.case$variable), ]
-edge.case2 = edge.case
-node.case = data.frame(unique(c(
-  as.character(edge.case2$genus),
-  as.character(edge.case2$variable)
-)))
-colnames(node.case) = "node"
-rownames(node.case) = node.case$node
-node.case$score <- 1
-node.case2 = node.case
-node.case2$weight = abs(node.case2$score)
-node.case2$class = 1 
-node.case2[top.tax2, "class"] = 2 
-node.case2 <- node.case2[complete.cases(node.case2), ]
-edge.case2$weight = 0.1
-for (kk in 1:length(top.tax2))
-{
-  for (mm in 1:nrow(edge.case2))
-  {
-    if (as.character(edge.case2[mm,1]) == top.tax2[kk] || as.character(edge.case2[mm,2]) == top.tax2[kk])
-    {
-      edge.case2[mm,"weight"] = 1
-    }else
-    {
-      next
-    }
-  }
-}
-edge.case2$class = 1
-edge.case2[which(edge.case2$value < 0), "class"] = 2  
-node.case2 <-   left_join(node.case2,annotation,by = "node") 
-g1 <- graph.empty()
-g1 <- graph_from_data_frame(edge.case2, vertices = node.case2)
-nodeSize <- 1.5
-nodeDize <- 1.2
-edgeSize <- 0.3
-edgeDize <- 0
-arrowSize = 0
-my.layout = layout.sphere
 
-EColor <- c("#ea66a6", "#2a5caa")
+#Fig5 D-----------------------------
+library(ggplot2)
+library(ggsci)
+pathway<-read.table('V_top20.txt', sep = '\t', header = TRUE, stringsAsFactors = FALSE)
+pathway = as.data.frame(pathway[(order(-pathway$importance)), ])
+rownames(pathway) <- pathway$species
+pathway$species <- factor(pathway$species,levels = rev(pathway$species))
 
-getPalette = colorRampPalette(brewer.pal(4, "Set1"))
-my_color <- getPalette(length(levels(as.factor(V(g1)$Phylum))))
-VText <- c(0.2,1)
-V(g1)$size <- nodeSize + nodeDize * 10 * as.numeric(as.vector(node.case2$weight*0.5))
+my_cols<-c("#4477b5","#acd1e1","#f6f6ca","#f9cc81","#da342e")
 
-V(g1)$color <- my_color[factor(node.case2$Phylum)] 
-V(g1)$label.cex <- VText[node.case2$class]
-V(g1)$frame.color <- "black"
-E(g1)$width <-
-  edgeSize + (edgeDize * abs(3 * as.numeric(as.vector(
-    edge.case2$weight
-  ))))
-E(g1)$color <- EColor[edge.case2$class]
-E(g1)$arrow.size <- arrowSize
-
-g1_2 <- g1
-V(g1_2)$label <- ifelse(V(g1_2)$name %in% top.tax2, as.character(V(g1_2)$name), "")
-
-e <- get.edgelist(g1_2,names=FALSE)
-l <- qgraph.layout.fruchtermanreingold(e,vcount=vcount(g1_2),
-                                       area=8*(vcount(g1_2)^2.3),repulse.rad=(vcount(g1_2)^3.1))
-plot(
-  g1_2,
-  layout = l,
-  edge.width=1.5, 
-  vertex.label.color=c("black"),
-  vertex.frame.color = "black",
-  vertex.shapes = "none"
-)
-legend("right", legend =levels(as.factor(V(g1)$Phylum)),
-       col = my_color,
-       horiz = FALSE,pch = 16,text.width = 1 / 50,cex = 2,
-       inset = 0.05, xpd =  FALSE,bty = "n",title = "Kingdom")
-
-p = myplot({
-  plot(g1_2,layout=layout.sphere,
-       vertex.color=my_color,
-       vertex.label.color=c("black"),
-       vertex.frame.color = "black",
-       vertex.shapes = "none"
-  )
-  legend("right", legend =levels(as.factor(V(g1)$Phylum)),
-         col = my_color,
-         horiz = FALSE,pch = 16,text.width = 1 / 50,cex = 1.3,
-         inset = 0.1, xpd =  FALSE,bty = "n",title = "Kingdom")
-})
+p <- ggplot(data = pathway, 
+            aes(x = importance, y = species,fill = importance))+ 
+  geom_bar(stat = "identity",width = 0.7,colour="black") +
+  scale_fill_gradientn(colors=my_cols)+
+  labs(x = "Importance",y = "",title = "")+ 
+  geom_vline(xintercept=0,lty=2,col="grey60",lwd=1.5) +
+  theme(plot.title = element_text(size=15,face="bold" ,hjust = 0.5),
+        axis.title=element_text(size=12,face="bold"),
+        legend.position = "right",
+        legend.text = element_text(size = 10),
+        axis.text.x = element_text(size = 9,
+                                   family = "sans"),
+        axis.text.y = element_text(family = "sans",size = 12),
+        legend.title = element_blank(),
+        text = element_text(family = "sans",size = 10),
+        strip.text.x = element_text(size = 0.5), 
+        strip.text= element_text(family = "sans",size = 7,face="italic"),
+        panel.background = element_rect(fill = 'grey92'),
+        panel.grid.major.x=element_blank(),
+        panel.grid.minor.x=element_blank(),
+        panel.grid.major.y=element_line(
+          colour="grey50",
+          size=.2,
+          linetype=2,
+          lineend=1),
+        legend.key = element_rect(fill = 'white'))
 p
-plotsave(p,file = paste0("Co-occurrence.pdf"),width =350, height = 250, units="mm",limitsize=FALSE)
-plotsave(p,file = paste0("Co-occurrence.png"),width = 350, height = 250, units="mm",limitsize=FALSE)
+ggsave(paste0("V_top20.pdf"), p, width = 200, height = 180, units="mm")
+ggsave(paste0("V_top20.png"), p, width = 200, height = 180, units="mm")
+

@@ -1,75 +1,117 @@
-#Fig6 B-----------------------------
-hebing <- read.table(file = paste0("bacteria.txt"),header = T)
-hebing$Group <- factor(hebing$Group, levels = cl_list)
+#Fig7 B-----------------------------
 
-col = c("#8DD3C7", "#FFFFB3", "#BEBADA", "#FB8072", "#80B1D3", "#FDB462", "#B3DE69", "#FCCDE5", 
-        "#D9D9D9", "#BC80BD", "#CCEBC5", "#FFED6F", "#1F78B4", "#33A02C", "#FF7F00")  
+result_df <- read.table(paste0("roc_zong.txt"),sep = "\t",header = T, comment.char="",check.names=F,quot="",stringsAsFactors = F)#读取相应模型的roc表
+result_df$Group<- factor(result_df$Group ,levels = c("mTBI","Stroke","MG","AD","PD","SCZ","MDD"),ordered = TRUE)
 
-p1 <- ggplot(hebing,aes(x=Group,y=AUC,fill = Group ))+  
-  stat_boxplot(geom = "errorbar",width = 0.15)+  
-  geom_boxplot(size = 0.5,fill = "white",outlier.shape = NA)+  
-  geom_jitter(aes(fill=Group),width = 0.2,shape=21,size=2.5)+  
-  scale_y_continuous(limits = c(0.95, 1), breaks = seq(0.95, 1, by = 0.05))+
-  theme_bw()+  
-  scale_fill_manual(values = col)+  
-  ggtitle("")+   
-  theme(axis.title.x = element_blank(),
-        axis.text.x = element_text(,size=13,angle = 45, hjust = 1),
-        axis.text.y = element_text(size = 13),
-        axis.title.y = element_text(size = 15),
-        panel.grid.major = element_blank(),        
-        panel.grid.minor = element_blank())+
-  guides(fill = FALSE)
-p1
+first_row_df <- result_df %>% 
+  group_by(Group) %>% 
+  slice(1) 
 
-ggsave(filename =paste0("boxplot_15.3.pdf"), p1, width = 130, height = 110, units="mm")
-ggsave(filename =paste0("boxplot_15.3.png"), p1, width = 130, height = 110, units="mm")
+legend_labels <- paste0(first_row_df$Group, ": ", round(first_row_df$AUC,3))
 
+Family_col <- c("#FF6666", "#FF9966", "#FFCC66","#33A02C","#1F78B4","#7570B3","#f6a5c0" )
 
-#Fig6 C-----------------------------
-df_wide_new1 <- as.matrix(read.table(paste0("feature_all.txt"),header = T, row.names = 1,sep = '\t',quot="",check.names=F))
-
-annotation_row1 = as.data.frame(read.table(paste0("anno.txt"), header=T, row.names=1, sep="\t", comment.char="", stringsAsFactors = F,quot=""))
-annotation_row1$Group<- factor(annotation_row1$Group,
-                               levels = c("one","two","three","four"),ordered = TRUE)
+roc_pic2 <- ggplot(result_df, aes(x = `1-specificities`, y = sensitivities)) +
+  geom_path(aes(color = Group), linewidth = 1.2, alpha = 0.7) +
+  geom_segment(aes(x = 0, xend = 1, y = 0, yend = 1), color = "darkgrey", linetype = 4) +
+  scale_color_manual(values = Family_col, labels = legend_labels) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(color = "black"),
+    legend.key.size = unit(0.4, "cm"),
+    plot.title = element_text(hjust = 0.5),
+    legend.justification = c(1, 0),
+    legend.position = c(0.95, 0.1),
+    legend.title = element_blank(),
+    legend.background = element_rect(fill = NULL, linewidth = 0.2, linetype = "solid", color = "black")
+  )
+roc_pic2
+ggsave(filename =paste0("roc_zong.pdf"), roc_pic2, width = 110, height = 100, units="mm")
+ggsave(filename =paste0("roc_zong.png"), roc_pic2, width = 110, height = 100, units="mm")
 
 
-annotation_row2 = as.data.frame(read.table(paste0("feature_anno.txt"), header=T, row.names=1, sep="\t", comment.char="", stringsAsFactors = F,quot=""))
-annotation_row2$Kindom<- factor(annotation_row2$Kindom,
-                                levels = c("Bacteria","Virus","Archaea","Fungi"),ordered = TRUE)
-
-ann_colors = list(
-  Group = c( one= "#3E4989", two = "#386CB0", three = "#A6CEE3", four = "#CCEBC5"),
-  Kindom = c( Bacteria = "#7570B3" , Virus = "#BC80BD" , Archaea  = "#DECBE4",Fungi  =  "#FDDAEC"),
-  Change= c(up = "#DE77AE",down = "#7FBC41"),
-  importance =   c(colorRampPalette(c('#3B4992FF','white'))(60),
-                           colorRampPalette(c('white','white'))(29),
-                           colorRampPalette(c('white','#EE0000FF'))(60)))
-mycol <- c(colorRampPalette(c("#31688E","#FED9A6"))(100))
-
-df_wide_new2 <- df_wide_new1[rownames(annotation_row2),]
-df_wide_new2[is.na(df_wide_new2)] <- 0
-df_wide_new2<- df_wide_new2[,c("A","B","F","V",
-                               "AB","AF","AV","BV","FV","BF",
-                               "ABV","ABF","AFV","BFV",
-                               "ABFV")]
-library(ggplot2)
+#Fig7 D-----------------------------
 library(pheatmap)
-p3=pheatmap(t(df_wide_new2),
-            cellwidth = 8,cellheight = 8,
-            cluster_cols = FALSE,
-            cluster_rows = FALSE,
-            color = mycol,
-            fontsize_number = 12,
-            number_color = "white",
-            fontsize_row=11,
-            fontsize_col=8,
-            annotation_row = annotation_row1,
-            annotation_col = annotation_row2,
-            annotation_colors = ann_colors
-)
-p3
+library(ComplexHeatmap)
+library(RColorBrewer)
+library("stringi")
+library(circlize)
 
-ggsave(filename =paste0("heatmap.feature.pdf"), p3, width = 450, height = 130, units="mm",limitsize = FALSE)
-ggsave(filename =paste0("heatmap.feature.png"), p3, width = 450, height = 130, units="mm",limitsize = FALSE)
+plotmat = read.table (file = "heatmap.cor.txt", row.names = 1, header = T, sep = "\t")
+stars = read.table (file = "heatmap.qval.txt", row.names = 1, header = T, sep = "\t")
+
+if (!is.null(stars)){
+  ssmt <- stars< 0.01
+  stars[ssmt] <-'**'
+  smt <- stars >0.01& stars <0.05
+  stars[smt] <- '*'
+  stars[!ssmt&!smt]<- ''
+} else {
+  stars <- F
+}
+
+maxr <- round(max(plotmat),4)*100
+minr <- abs(round(min(plotmat),4)*100)
+
+annotation2 = as.data.frame(read.table(paste0("heatmap_anno.txt"), header=T, row.names=1, sep="\t", comment.char="", stringsAsFactors = F,quot=""))
+annotation2 <- as.data.frame(annotation2[rownames(plotmat),])
+colnames(annotation2) <- "Kingdom"
+
+kindom_col <-c("#B2DF8A",  "#FCCDE5","#B3CDE3","#BEBADA")
+names(kindom_col) <- unique(annotation2$Kingdom)
+
+species_ann <- rowAnnotation(
+  Kingdom= annotation2$Kingdom,
+  col = list( 
+    Kingdom=kindom_col
+  )
+)
+
+maxr <- round(max(plotmat),4)*100
+minr <- abs(round(min(plotmat),4)*100)
+
+mycol <- c(colorRampPalette(c('#1F78B4','white'))(minr),
+           colorRampPalette(c('white','white'))(3),
+           colorRampPalette(c('white','#FB9A99'))(maxr))
+
+spe <- rownames(plotmat)
+PA <- c("mTBI", "Stroke", "MG","AD","PD","SCZ","MDD")
+column_order <- PA
+row_order <- spe
+
+cell_fun <-function(j, i, x, y, width, height, fill) {
+  grid.text(stars[i,j], 
+            x = x, 
+            y =  y-height*0.3,
+            gp = gpar(fontsize = 15,col="black"))
+}
+
+p=Heatmap(plotmat,cluster_rows = T,
+          width = unit(3.5, "cm"),
+          height = unit(10, "cm"),
+          row_names_gp = gpar(fontsize = 11,col ="black"),
+          column_names_gp = gpar(fontsize = 11,col ="black"),
+          row_names_max_width = unit(100,"mm"),
+          heatmap_legend_param = list(
+            at = c(-0.4,-0.2, 0, 0.2,0.4)
+          ),
+          cell_fun = cell_fun,
+          rect_gp = gpar(col = "grey", lwd = 1),
+           name = "Coef.",
+          row_order=row_order,
+          column_order=column_order,
+           left_annotation = species_ann,
+          col = mycol)
+p
+
+pdf("heatmap_zong_mtbi_qval.pdf",  width=6, height=5)
+p
+dev.off()
+
+png("heatmap_zong_mtbi_qval.png",  width=500, height=450)
+p
+dev.off()
+
+
+
 
